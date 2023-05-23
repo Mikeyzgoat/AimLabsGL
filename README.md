@@ -1,2 +1,2 @@
-# TetrisGL
-<p align="center">A recreated Tetris game made in OpenGL (C++)</p>
+# AimLabsGL
+<p align="center">A recreated Aim Lab made in OpenGL (C++)</p>
