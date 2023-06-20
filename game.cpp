@@ -1,4 +1,81 @@
-#include "game.hpp"
+#include <GL/glut.h>
+#include <math.h>
+#include<stdlib.h>
+#include <vector>
+#include<GL/freeglut.h>
+#include<GL/glu.h>
+#include<GL/gl.h>
+
+
+#define MENU_SUB_15_TARGET 1
+#define MENU_SUB_30_TARGET 2
+#define MENU_SUB_TARGET_SIZE_SMALL 3
+#define MENU_SUB_TARGET_SIZE_MEDIUM 4
+#define MENU_SUB_TARGET_SIZE_LARGE 5
+#define MENU_GAME_EXIT 6
+#define MENU_GAME_HOME 7
+#define TARGET_COLOR_TEAL 8
+#define TARGET_COLOR_ORANGE 9
+#define TARGET_COLOR_CREAM 10
+#define TARGET_COLOR_PURPLE 11
+#define TARGET_COLOR_GREEN 12
+
+class Bullet {
+public:
+    float positionX;
+    float positionY;
+    float positionZ;
+    float directionX;
+    float directionY;
+    float directionZ;
+    bool active;
+    int bullet_count;
+
+    Bullet(float posX, float posY, float posZ, float dirX, float dirY, float dirZ);
+    void update(float deltatime);
+    bool checkCollision(float targetX,float targetY,float targetZ,float targetRadius);
+};
+
+
+class functions{
+    public:
+        void keyboard_func(unsigned char key,int x, int y);
+        void mouse_func(int button,int status,int x,int y);
+        void mouse_motion_func(int x, int y);
+        void display();
+        void drawRoom();
+        void reshape(int w,int h);
+        void idle();
+        void display_accuracy(int max_target,int bullet_count);
+        void menu_options(int option);
+        void totalmenu();
+        void game_entry();
+        void draw_intro();
+};
+
+float cameraX = 0.0f;
+float cameraY =2.0f;
+float cameraZ = 15.0f;
+float cameraAngleX = 0.0f;
+float cameraAngleY = 0.0f;
+float cameraSpeed = 0.1f; // Adjust camera movement speed as needed
+float aspectRatio;
+int windowWidth;
+int windowHeight;
+float cameraMinX = -9.0f;
+float cameraMaxX = 9.0f;
+float cameraMinZ = 15.0f;
+float cameraMaxZ = 29.0f;
+float targetX = 0.0f;
+float targetY = 5.0f;
+float targetZ = -9.0f;
+float targetRadius = 0.8f; // LARGEST RADIUS
+bool gameset=false;
+int max_targets = 30;
+bool end_of_round=false;
+int numtargets=0,bullet_count=0;
+std::vector<Bullet> bullets;
+float target_color[3] = {0,0.392,0};
 functions f;
 // bullet functions
 void Bullet::update(float deltaTime) {
@@ -41,7 +118,9 @@ void functions::mouse_func(int button,int status,int x, int y){
     }
 }
 void functions::display(){
-    if(gameset && end_of_round){
+    glClearColor(1,1,1,1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    if(gameset){
         glClearColor(0.8,0.8,0.8,1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glMatrixMode(GL_PROJECTION);
@@ -56,60 +135,84 @@ void functions::display(){
                 0.0f, 1.0f, 0.0f);          // up direction
 
         // Draw the scene objects
-        drawRoom();
-    // Draw the gun
-        glColor3f(0,0.392,0);
-        glPushMatrix();
-        glTranslatef(targetX,targetY,targetZ);
-        glutSolidSphere(targetRadius,20,20);
-        glPopMatrix();
-        glutSwapBuffers();
-        numtargets=0,bullet_count=0;
-        glPushMatrix();
-        glColor3f(1,0,0);
-        glPointSize(5);
-        glBegin(GL_POINTS);
-            glVertex3f(cameraX + sin(cameraAngleY) * 0.5f, cameraY + sin(cameraAngleX) * 0.5f, cameraZ - cos(cameraAngleY) * 0.5f);
-
-        glEnd();
-        glPopMatrix();
-        glPushMatrix();
-        glTranslatef(cameraX + sin(cameraAngleY) * 0.5f, cameraY + sin(cameraAngleX) * 0.5f, cameraZ - cos(cameraAngleY) * 0.5f);
-    // Assuming the gun size as a cube with side length 0.1
-        glPopMatrix();
-        if(numtargets == max_targets){
-            end_of_round=false;
-        }
-        // Draw the bullets
-        glColor3f(1.0f, 1.0f, 0.0f); // red color for the bullets
-        for (auto& bullet : bullets) {
-            if (bullet.active) {
-                glPushMatrix();
-                glTranslatef(bullet.positionX, bullet.positionY, bullet.positionZ);
-                glutSolidSphere(0.15f, 10, 10); // Assuming bullet radius is 0.1
-                glPopMatrix();
-                if(bullet.checkCollision(targetX,targetY,targetZ,targetRadius)){
-                    bullet.active = false;
-                    targetX = static_cast<float>(rand()%11 - 5);
-                    targetY = static_cast<float>(rand()%8 + 2);
-                    bullet_count+=1;
-                    numtargets+=1;
-                }
-                else{bullet.bullet_count+=1;} // increasing count of bullets at each bullet shot
-            }
-        }
-        display_count_of_target_and_bullets(max_targets-numtargets,bullet_count);
-    }
-    else if(!end_of_round){
-        display_accuracy(numtargets,max_targets);
+        game_entry();
     }
     else{
-        setup_2d_ortho();
-        draw_intro();
-    }
+        glClearColor(0,0,0,1);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        gluPerspective(40.0, aspectRatio, 0.01, 100.0);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
 
+            // Set up the camera
+        gluLookAt(cameraX, cameraY, cameraZ,           // eye position
+                0, 0, 0,   // look-at position
+                0.0f, 1.0f, 0.0f);
+        glColor3f(1,1,0);
+        // print text to prompt user to press G to start the game
+        glPushMatrix();
+            glTranslatef(-6.5, 0, 0);
+            glScalef(0.02, 0.02, 0.02);
+            for (char *p = "AimLabsGL"; *p; p++)
+                glutStrokeCharacter(GLUT_STROKE_ROMAN, *p);
+        glPopMatrix();
+        glColor3f(1,0,1);
+        glPushMatrix();
+            glTranslatef(-3.5, -1, 0);
+            glScalef(0.004, 0.004, 0.002);
+            for (char *p = "Press G to start"; *p; p++)
+                glutStrokeCharacter(GLUT_STROKE_ROMAN, *p);
+        glPopMatrix();
+
+    }
+    glutSwapBuffers();
+    
 }
 
+void functions::game_entry(){
+    drawRoom();
+// Draw the gun
+    glColor3f(target_color[0],target_color[1],target_color[2]);
+    glPushMatrix();
+    glTranslatef(targetX,targetY,targetZ);
+    glutSolidSphere(targetRadius,20,20);
+    glPopMatrix();
+
+
+    glPushMatrix();
+    glColor3f(1,0,0);
+    glPointSize(5);
+    glBegin(GL_POINTS);
+        glVertex3f(cameraX + sin(cameraAngleY) * 0.5f, cameraY + sin(cameraAngleX) * 0.5f, cameraZ - cos(cameraAngleY) * 0.5f);
+    glEnd();
+    glPopMatrix();
+    glPushMatrix();
+    glTranslatef(cameraX + sin(cameraAngleY) * 0.5f, cameraY + sin(cameraAngleX) * 0.5f, cameraZ - cos(cameraAngleY) * 0.5f);
+// Assuming the gun size as a cube with side length 0.1
+    glPopMatrix();
+    // Draw the bullets
+    glPushMatrix();
+    glColor3f(1.0f, 1.0f, 0.0f); // red color for the bullets
+    for (auto& bullet : bullets) {
+        if (bullet.active) {
+            glPushMatrix();
+            glTranslatef(bullet.positionX, bullet.positionY, bullet.positionZ);
+            glutSolidSphere(0.15f, 10, 10); // Assuming bullet radius is 0.1
+            glPopMatrix();
+            if(bullet.checkCollision(targetX,targetY,targetZ,targetRadius)){
+                bullet.active = false;
+                targetX = static_cast<float>(rand()%11 - 5);
+                targetY = static_cast<float>(rand()%8 + 2);
+                bullet_count+=1;
+                numtargets+=1;
+            }
+            else{bullet.bullet_count+=1;} // increasing count of bullets at each bullet shot
+        }
+    }
+    glPopMatrix();
+}
 void functions::drawRoom(){
     // Draw the floor
     glPushMatrix();
@@ -238,9 +341,11 @@ void functions::menu_options(int option){
     switch(option){
         case MENU_SUB_15_TARGET:
             max_targets = 15;
+            bullet_count =0;
             break;
         case MENU_SUB_30_TARGET:
             max_targets = 30;
+            bullet_count=0;
             break;
         case MENU_SUB_TARGET_SIZE_SMALL:
             targetRadius=0.4f;
@@ -257,97 +362,62 @@ void functions::menu_options(int option){
         case MENU_GAME_HOME:
             gameset=false;
             break;
+        case TARGET_COLOR_GREEN:
+            target_color[0] = 0;
+            target_color[1] = 0.392f;
+            target_color[2] = 0;
+            break;
+        case TARGET_COLOR_PURPLE:
+            target_color[0] = 0.733;
+            target_color[1] = 0.161;
+            target_color[2] = 0.733;
+            break;
+        case TARGET_COLOR_TEAL:
+            target_color[0] = 0.188;
+            target_color[1] = 0.808;
+            target_color[2] = 0.847;
+            break;
+        case TARGET_COLOR_ORANGE:
+            target_color[0] = 1;
+            target_color[1] = 0.51;
+            target_color[2] = 0;
+            break;
+        case TARGET_COLOR_CREAM:
+            target_color[0] = 0.996f;
+            target_color[1] = 0.988f;
+            target_color[2] = 0.843f;
+            break;
     }
 }
 void menu_function(int option){f.menu_options(option);}
 // add this into functions class
 void functions::totalmenu(){
+    // game mode sub menu
     int game_mode_menu = glutCreateMenu(menu_function);
     glutAddMenuEntry("15 TARGETS",MENU_SUB_15_TARGET);
     glutAddMenuEntry("30 TARGETS",MENU_SUB_30_TARGET);
+    // target size sub menu
     int target_size_menu = glutCreateMenu(menu_function);
     glutAddMenuEntry("SMALL",MENU_SUB_TARGET_SIZE_SMALL);
     glutAddMenuEntry("MEDIUM",MENU_SUB_TARGET_SIZE_MEDIUM);
     glutAddMenuEntry("LARGE",MENU_SUB_TARGET_SIZE_LARGE);
+    // target color sub menu
+    int target_color_menu = glutCreateMenu(menu_function);
+    glutAddMenuEntry("CREAM", TARGET_COLOR_CREAM);
+    glutAddMenuEntry("GREEN",TARGET_COLOR_GREEN);
+    glutAddMenuEntry("PURPLE",TARGET_COLOR_PURPLE);
+    glutAddMenuEntry("ORANGE",TARGET_COLOR_ORANGE);
+    glutAddMenuEntry("TEAL",TARGET_COLOR_TEAL);
+    // create the entire menu
     glutCreateMenu(menu_function);
-    glutAddMenuEntry("Game Modes",game_mode_menu);
-    glutAddMenuEntry("Target Size",target_size_menu);
+    glutAddSubMenu("Game Modes",game_mode_menu);
+    glutAddSubMenu("Target Size",target_size_menu);
+    glutAddSubMenu("Target Color",target_color_menu);
     glutAddMenuEntry("Go To Home",MENU_GAME_HOME);
     glutAddMenuEntry("Exit Game",MENU_GAME_EXIT);
     
     glutAttachMenu(GLUT_RIGHT_BUTTON);
 }
-void functions::setup_2d_ortho(){
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluOrtho2D(0,500,0,500);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-}
-void functions::display_accuracy(int mxt,int bltc){
-    glClearColor(0.8,0.8,0.8,1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // string fro number of targets in the game round,i.e max target
-    glPushMatrix();
-    glRasterPos3f(-5,-5,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)"Number Of Targets : ");
-    glPopMatrix();
-        glPushMatrix();
-    glRasterPos3f(-5,-7,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)mxt);
-    glPopMatrix();
-        glPushMatrix();
-    glRasterPos3f(0,-5,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)"Number of Bullets Fired : ");
-    glPopMatrix();
-        glPushMatrix();
-    glRasterPos3f(-5,-7,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)bltc);
-    glPopMatrix();
-        glPushMatrix();
-    glRasterPos3f(5,-5,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)"Accuracy : ");
-    glPopMatrix();
-        glPushMatrix();
-    glRasterPos3f(5,-7,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)((mxt/bltc)*100));
-    glPopMatrix();
-
-}
-
-void functions::display_count_of_target_and_bullets(int mxt,int bltc){
-    glClearColor(0.8,0.8,0.8,1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glPushMatrix();
-    glRasterPos3f(-8,-5,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)"Targets Left : ");
-    glPopMatrix();
-    glPushMatrix();
-    glRasterPos3f(5,-7,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)mxt);
-    glPopMatrix();
-    glPushMatrix();
-    glRasterPos3f(8,-5,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)"BulletsFired : ");
-    glPopMatrix();
-    glPushMatrix();
-    glRasterPos3f(5,-7,9);
-    glColor3f(1,1,1);
-    glutBitmapString(GLUT_BITMAP_HELVETICA_12,(unsigned char*)bltc);
-    glPopMatrix();
-}
-
 
 // defining all functions to be registered.
 
